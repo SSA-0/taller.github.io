@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Taller">
+<meta name="theme-color" content="#111827">
+<title>Inventario Taller</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23111827'/%3E%3Ctext x='50' y='68' font-size='52' fill='%23f97316' text-anchor='middle' font-family='Arial' font-weight='bold'%3ET%3C/text%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --surface-2: #f3f4f6;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --danger-bg: #fef2f2;
+    --danger-text: #b91c1c;
+    --success-bg: #f0fdf4;
+    --success-text: #15803d;
+    --warning-bg: #fffbeb;
+    --warning-text: #b45309;
+  }
+  [data-theme="oscuro"] {
+    --bg: #0b0f17;
+    --surface: #161b26;
+    --surface-2: #1f2533;
+    --border: #2a3142;
+    --text: #f3f4f6;
+    --text-muted: #9aa3b2;
+    --accent: #3b82f6;
+    --accent-text: #ffffff;
+    --danger-bg: #2a1414;
+    --danger-text: #f87171;
+    --success-bg: #142a1c;
+    --success-text: #4ade80;
+    --warning-bg: #2a2114;
+    --warning-text: #fbbf24;
+  }
+  [data-theme="industrial"] {
+    --bg: #18181b;
+    --surface: #232326;
+    --surface-2: #2e2e32;
+    --border: #3a3a3f;
+    --text: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --accent: #dc2626;
+    --accent-text: #ffffff;
+    --danger-bg: #2a1414;
+    --danger-text: #f87171;
+    --success-bg: #142a1c;
+    --success-text: #4ade80;
+    --warning-bg: #2a2114;
+    --warning-text: #fbbf24;
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); transition: background 0.15s, color 0.15s; }
+  input, select, textarea, button { font-size: 16px; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+  .surface { background: var(--surface); border-color: var(--border) !important; }
+  .surface-2 { background: var(--surface-2); }
+  .text-base-c { color: var(--text); }
+  .text-muted-c { color: var(--text-muted); }
+  .border-c { border-color: var(--border) !important; }
+  .accent-bg { background: var(--accent); color: var(--accent-text); }
+  .accent-text { color: var(--accent); }
+  .danger-bg { background: var(--danger-bg); color: var(--danger-text); }
+  .success-bg { background: var(--success-bg); color: var(--success-text); }
+  .warning-bg { background: var(--warning-bg); color: var(--warning-text); }
+  .input-c { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+  .input-c::placeholder { color: var(--text-muted); }
+  .btn-secondary { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="antialiased">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo } = React;
+
+// =========================================================
+// CONFIGURACIÓN SUPABASE
+// =========================================================
+const SUPABASE_URL = 'https://gnmwlutfkwszbtomkgkj.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ryDw9NMCjWcRl2rOhqahzg_0YtRG60S';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const THEMES = [
+  { id: 'claro', label: 'Claro corporativo', desc: 'Fondo blanco, acentos azules', swatch: ['#ffffff', '#2563eb', '#f3f4f6'] },
+  { id: 'oscuro', label: 'Oscuro moderno', desc: 'Estilo apps tech', swatch: ['#0b0f17', '#3b82f6', '#161b26'] },
+  { id: 'industrial', label: 'Industrial', desc: 'Negro y rojo, estilo taller', swatch: ['#18181b', '#dc2626', '#232326'] }
+];
+
+const CATEGORIAS = ['Lubricantes', 'Frenos', 'Eléctrico', 'Llantas', 'Motor', 'Suspensión', 'Filtros', 'Otros'];
+
+function formatCOP(value) {
+  return '$' + Math.round(value || 0).toLocaleString('es-CO');
+}
+
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// =========================================================
+// ICONOS
+// =========================================================
+const Icon = {
+  home: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>,
+  box: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>,
+  clipboard: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 9h6M9 13h6M9 17h4"/></svg>,
+  coins: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v4c0 1.7 2.7 3 6 3s6-1.3 6-3V7M3 11v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4"/><path d="M15 10c2.8.3 6 1.4 6 3.5S18.8 17 16 17.3M15 14c2.8.3 6 1.4 6 3.5"/></svg>,
+  settings: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  plus: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>,
+  trash: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>,
+  search: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+  alert: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>,
+  x: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>,
+  check: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>,
+  wrench: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.6 5.6l-5.8 5.8a1.5 1.5 0 0 0 2.1 2.1l5.8-5.8a4 4 0 0 0 5.6-5.6L19.8 5.4a.5.5 0 0 0-.7-.7z"/></svg>,
+  logout: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>,
+  calendar: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+  spinner: (p) => <svg {...p} className={"spin " + (p.className||"")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+};
+
+// =========================================================
+// APP RAÍZ: maneja sesión
+// =========================================================
+function Root() {
+  const [session, setSession] = useState(undefined); // undefined = cargando
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <Icon.spinner className="w-8 h-8 text-gray-400" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
+  return <App session={session} />;
+}
+
+// =========================================================
+// PANTALLA DE LOGIN / REGISTRO
+// =========================================================
+function AuthScreen() {
+  const [mode, setMode] = useState('login'); // login | signup
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nombreTaller, setNombreTaller] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  const inputClass = "border border-gray-300 rounded-lg px-3 py-2.5 text-sm w-full bg-white";
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        // Crear configuración inicial con el nombre del taller
+        if (data.user) {
+          await supabase.from('configuracion').upsert({
+            user_id: data.user.id,
+            nombre_taller: nombreTaller || 'Mi taller',
+            tema: 'claro',
+            porcentaje_taller: 40
+          });
+        }
+        if (!data.session) {
+          setInfo('Cuenta creada. Si pide confirmación, revisa tu correo antes de iniciar sesión.');
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Ocurrió un error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mx-auto mb-3">
+            <Icon.wrench className="w-6 h-6" />
+          </div>
+          <h1 className="text-xl font-semibold">Inventario Taller</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {mode === 'login' ? 'Inicia sesión en tu taller' : 'Crea la cuenta de tu taller'}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+          {mode === 'signup' && (
+            <input
+              type="text"
+              placeholder="Nombre del taller"
+              value={nombreTaller}
+              onChange={e => setNombreTaller(e.target.value)}
+              className={inputClass}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className={inputClass}
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className={inputClass}
+          />
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          {info && <p className="text-sm text-green-600">{info}</p>}
+
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-60">
+            {loading && <Icon.spinner className="w-4 h-4" />}
+            {mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+          </button>
+        </form>
+
+        <button
+          onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setInfo(''); }}
+          className="w-full text-center text-sm text-blue-600 mt-4"
+        >
+          {mode === 'login' ? '¿No tienes cuenta? Crear una' : '¿Ya tienes cuenta? Inicia sesión'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// APP PRINCIPAL (usuario autenticado)
+// =========================================================
+function App({ session }) {
+  const userId = session.user.id;
+  const [tab, setTab] = useState('resumen');
+  const [loading, setLoading] = useState(true);
+  const [inventario, setInventario] = useState([]);
+  const [trabajos, setTrabajos] = useState([]);
+  const [config, setConfig] = useState({ nombre_taller: 'Mi taller', tema: 'claro', porcentaje_taller: 40 });
+
+  // Carga inicial
+  useEffect(() => {
+    let active = true;
+    async function loadAll() {
+      setLoading(true);
+      const [invRes, trabRes, cfgRes] = await Promise.all([
+        supabase.from('inventario').select('*').order('nombre'),
+        supabase.from('trabajos').select('*').order('fecha', { ascending: false }).order('created_at', { ascending: false }),
+        supabase.from('configuracion').select('*').eq('user_id', userId).maybeSingle()
+      ]);
+      if (!active) return;
+      if (invRes.data) setInventario(invRes.data);
+      if (trabRes.data) setTrabajos(trabRes.data);
+      if (cfgRes.data) {
+        setConfig(cfgRes.data);
+      } else {
+        // Crear configuración por defecto si no existe
+        const defaultCfg = { user_id: userId, nombre_taller: 'Mi taller', tema: 'claro', porcentaje_taller: 40 };
+        await supabase.from('configuracion').upsert(defaultCfg);
+        setConfig(defaultCfg);
+      }
+      setLoading(false);
+    }
+    loadAll();
+    return () => { active = false; };
+  }, [userId]);
+
+  // Aplicar tema
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', config.tema || 'claro');
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      const colors = { claro: '#ffffff', oscuro: '#0b0f17', industrial: '#18181b' };
+      metaTheme.setAttribute('content', colors[config.tema] || '#ffffff');
+    }
+  }, [config.tema]);
+
+  // ---- Acciones inventario ----
+  async function addInventarioItem(item) {
+    const { data, error } = await supabase.from('inventario').insert({ ...item, user_id: userId }).select().single();
+    if (!error && data) setInventario(prev => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+  }
+
+  async function updateInventarioStock(id, newStock) {
+    setInventario(prev => prev.map(i => i.id === id ? { ...i, stock: newStock } : i));
+    await supabase.from('inventario').update({ stock: newStock }).eq('id', id);
+  }
+
+  async function deleteInventarioItem(id) {
+    setInventario(prev => prev.filter(i => i.id !== id));
+    await supabase.from('inventario').delete().eq('id', id);
+  }
+
+  // ---- Acciones trabajos ----
+  async function addTrabajo(trabajo, descuentos) {
+    const { data, error } = await supabase.from('trabajos').insert({ ...trabajo, user_id: userId }).select().single();
+    if (!error && data) {
+      setTrabajos(prev => [data, ...prev]);
+      // Aplicar descuentos de stock
+      for (const d of descuentos) {
+        const item = inventario.find(i => i.id === d.itemId);
+        if (item) {
+          const newStock = Math.max(0, item.stock - d.cantidad);
+          await updateInventarioStock(item.id, newStock);
+        }
+      }
+    }
+  }
+
+  async function deleteTrabajo(id) {
+    setTrabajos(prev => prev.filter(t => t.id !== id));
+    await supabase.from('trabajos').delete().eq('id', id);
+  }
+
+  // ---- Acciones configuración ----
+  async function updateConfig(patch) {
+    const newConfig = { ...config, ...patch };
+    setConfig(newConfig);
+    await supabase.from('configuracion').upsert({ user_id: userId, ...newConfig });
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+  }
+
+  // ---- Cálculos derivados ----
+  const valorInventario = inventario.reduce((sum, item) => sum + (item.stock * item.precio_costo), 0);
+  const itemsStockBajo = inventario.filter(item => item.stock <= item.stock_minimo);
+
+  const totalManoObra = trabajos.reduce((sum, t) => sum + (Number(t.mano_obra) || 0), 0);
+  const pct = config.porcentaje_taller ?? 40;
+  const totalTaller = totalManoObra * (pct / 100);
+  const totalTrabajadores = totalManoObra - totalTaller;
+
+  const repartoPorPersona = {};
+  trabajos.forEach(t => {
+    const persona = t.responsable || 'Sin asignar';
+    if (!repartoPorPersona[persona]) {
+      repartoPorPersona[persona] = { totalManoObra: 0, paraPersona: 0, paraTaller: 0 };
+    }
+    const mo = Number(t.mano_obra) || 0;
+    const taller = mo * (pct / 100);
+    repartoPorPersona[persona].totalManoObra += mo;
+    repartoPorPersona[persona].paraTaller += taller;
+    repartoPorPersona[persona].paraPersona += (mo - taller);
+  });
+
+  const ingresosRepuestos = trabajos.reduce((sum, t) => {
+    const reps = t.repuestos_usados || [];
+    return sum + reps.reduce((s2, r) => {
+      const item = inventario.find(i => i.id === r.itemId);
+      return s2 + (item ? item.precio_venta * r.cantidad : 0);
+    }, 0);
+  }, 0);
+
+  const navItems = [
+    { id: 'resumen', label: 'Resumen', icon: Icon.home },
+    { id: 'inventario', label: 'Inventario', icon: Icon.box },
+    { id: 'trabajos', label: 'Trabajos', icon: Icon.clipboard },
+    { id: 'reparto', label: 'Reparto', icon: Icon.coins },
+    { id: 'config', label: 'Configuración', icon: Icon.settings }
+  ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Icon.spinner className="w-8 h-8 text-muted-c" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen md:flex">
+      <aside className="hidden md:flex md:flex-col md:w-60 md:shrink-0 surface border-r border-c md:min-h-screen md:sticky md:top-0">
+        <div className="px-5 py-5 flex items-center gap-2 border-b border-c">
+          <div className="w-9 h-9 rounded-lg accent-bg flex items-center justify-center shrink-0">
+            <Icon.wrench className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate">{config.nombre_taller || 'Mi taller'}</p>
+            <p className="text-xs text-muted-c truncate">{session.user.email}</p>
+          </div>
+        </div>
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {navItems.map(item => {
+            const IconC = item.icon;
+            const active = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors " + (active ? "accent-bg" : "text-base-c hover:surface-2")}
+              >
+                <IconC className="w-5 h-5 shrink-0" />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="px-3 py-4 border-t border-c">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-c hover:surface-2">
+            <Icon.logout className="w-5 h-5" /> Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex-1 min-w-0">
+        <header className="md:hidden surface border-b border-c px-4 py-3 flex items-center gap-2 sticky top-0 z-10">
+          <div className="w-8 h-8 rounded-lg accent-bg flex items-center justify-center shrink-0">
+            <Icon.wrench className="w-4 h-4" />
+          </div>
+          <p className="font-semibold text-sm truncate flex-1">{config.nombre_taller || 'Mi taller'}</p>
+          <button onClick={handleLogout} className="text-muted-c p-1">
+            <Icon.logout className="w-5 h-5" />
+          </button>
+        </header>
+
+        <main className="max-w-3xl mx-auto px-4 py-5 pb-24 md:pb-10">
+          {tab === 'resumen' && (
+            <ResumenTab
+              valorInventario={valorInventario}
+              itemsStockBajo={itemsStockBajo}
+              totalManoObra={totalManoObra}
+              totalTaller={totalTaller}
+              totalTrabajadores={totalTrabajadores}
+              ingresosRepuestos={ingresosRepuestos}
+              numTrabajos={trabajos.length}
+              setTab={setTab}
+            />
+          )}
+          {tab === 'inventario' && (
+            <InventarioTab inventario={inventario} addItem={addInventarioItem} updateStock={updateInventarioStock} deleteItem={deleteInventarioItem} />
+          )}
+          {tab === 'trabajos' && (
+            <TrabajosTab trabajos={trabajos} inventario={inventario} addTrabajo={addTrabajo} deleteTrabajo={deleteTrabajo} />
+          )}
+          {tab === 'reparto' && (
+            <RepartoTab config={config} updateConfig={updateConfig} totalManoObra={totalManoObra} totalTaller={totalTaller} totalTrabajadores={totalTrabajadores} repartoPorPersona={repartoPorPersona} />
+          )}
+          {tab === 'config' && (
+            <ConfigTab config={config} updateConfig={updateConfig} email={session.user.email} onLogout={handleLogout} />
+          )}
+        </main>
+      </div>
+
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 surface border-t border-c flex justify-around py-2 z-10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
+        {navItems.map(item => {
+          const IconC = item.icon;
+          const active = tab === item.id;
+          return (
+            <button key={item.id} onClick={() => setTab(item.id)} className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]">
+              <IconC className={"w-5 h-5 " + (active ? "accent-text" : "text-muted-c")} />
+              <span className={"text-[11px] " + (active ? "accent-text font-medium" : "text-muted-c")}>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+// =========================================================
+// COMPONENTES COMPARTIDOS
+// =========================================================
+function Card({ children, className }) {
+  return <div className={"surface border border-c rounded-xl p-4 " + (className || "")}>{children}</div>;
+}
+
+function MetricCard({ label, value, icon: IconC }) {
+  return (
+    <div className="surface-2 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs text-muted-c">{label}</p>
+        {IconC && <IconC className="w-4 h-4 text-muted-c" />}
+      </div>
+      <p className="text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return <h2 className="text-base font-semibold mb-3">{children}</h2>;
+}
+
+// =========================================================
+// RESUMEN
+// =========================================================
+function ResumenTab({ valorInventario, itemsStockBajo, totalManoObra, totalTaller, totalTrabajadores, ingresosRepuestos, numTrabajos, setTab }) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Resumen general</h1>
+        <p className="text-sm text-muted-c">Estado actual del taller</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <MetricCard label="Valor del inventario" value={formatCOP(valorInventario)} icon={Icon.box} />
+        <MetricCard label="Mano de obra total" value={formatCOP(totalManoObra)} icon={Icon.coins} />
+        <MetricCard label="Ingresos por repuestos" value={formatCOP(ingresosRepuestos)} icon={Icon.box} />
+        <MetricCard label="Trabajos registrados" value={numTrabajos} icon={Icon.clipboard} />
+      </div>
+
+      <div>
+        <SectionTitle>Accesos rápidos</SectionTitle>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => setTab('inventario')} className="surface border border-c rounded-xl p-4 text-left flex items-center gap-3 hover:surface-2 transition-colors">
+            <div className="w-10 h-10 rounded-lg accent-bg flex items-center justify-center shrink-0"><Icon.plus className="w-5 h-5" /></div>
+            <div><p className="font-medium text-sm">Agregar repuesto</p><p className="text-xs text-muted-c">Al inventario</p></div>
+          </button>
+          <button onClick={() => setTab('trabajos')} className="surface border border-c rounded-xl p-4 text-left flex items-center gap-3 hover:surface-2 transition-colors">
+            <div className="w-10 h-10 rounded-lg accent-bg flex items-center justify-center shrink-0"><Icon.wrench className="w-5 h-5" /></div>
+            <div><p className="font-medium text-sm">Nuevo trabajo</p><p className="text-xs text-muted-c">Registrar servicio</p></div>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle>Reparto de mano de obra</SectionTitle>
+        <Card>
+          <div className="flex justify-between text-sm border-b border-c py-2.5">
+            <span className="text-muted-c">Para el taller</span>
+            <span className="font-medium">{formatCOP(totalTaller)}</span>
+          </div>
+          <div className="flex justify-between text-sm py-2.5">
+            <span className="text-muted-c">Para trabajadores</span>
+            <span className="font-medium">{formatCOP(totalTrabajadores)}</span>
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <SectionTitle>Alertas de stock</SectionTitle>
+        {itemsStockBajo.length > 0 ? (
+          <Card className="danger-bg border-0">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon.alert className="w-4 h-4" />
+              <p className="font-medium text-sm">{itemsStockBajo.length} repuesto(s) con stock bajo</p>
+            </div>
+            <div className="space-y-1">
+              {itemsStockBajo.map(item => (
+                <p key={item.id} className="text-sm">{item.nombre} — quedan {item.stock} (mínimo {item.stock_minimo})</p>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <Card className="text-center text-sm text-muted-c">Todo el inventario está dentro de los niveles mínimos</Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// INVENTARIO
+// =========================================================
+function InventarioTab({ inventario, addItem, updateStock, deleteItem }) {
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ nombre: '', categoria: '', stock: '', stock_minimo: '', precio_costo: '', precio_venta: '' });
+
+  const inputClass = "input-c rounded-lg px-3 py-2.5 text-sm w-full";
+
+  async function handleAdd() {
+    if (!form.nombre.trim() || saving) return;
+    setSaving(true);
+    await addItem({
+      nombre: form.nombre,
+      categoria: form.categoria || 'Otros',
+      stock: Number(form.stock) || 0,
+      stock_minimo: Number(form.stock_minimo) || 0,
+      precio_costo: Number(form.precio_costo) || 0,
+      precio_venta: Number(form.precio_venta) || 0
+    });
+    setForm({ nombre: '', categoria: '', stock: '', stock_minimo: '', precio_costo: '', precio_venta: '' });
+    setShowForm(false);
+    setSaving(false);
+  }
+
+  function handleRemove(id) {
+    if (!confirm('¿Eliminar este repuesto?')) return;
+    deleteItem(id);
+  }
+
+  const filtered = inventario.filter(i =>
+    i.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (i.categoria || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Inventario</h1>
+        <p className="text-sm text-muted-c">{inventario.length} repuesto(s) registrados</p>
+      </div>
+
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Icon.search className="w-4 h-4 text-muted-c absolute left-3 top-1/2 -translate-y-1/2" />
+          <input type="text" placeholder="Buscar repuesto o categoría..." value={search} onChange={e => setSearch(e.target.value)} className={inputClass + " pl-9"} />
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="accent-bg rounded-lg px-4 py-2.5 text-sm font-medium whitespace-nowrap flex items-center gap-1.5">
+          <Icon.plus className="w-4 h-4" /> Nuevo
+        </button>
+      </div>
+
+      {showForm && (
+        <Card className="space-y-2.5">
+          <input type="text" placeholder="Nombre del repuesto" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} />
+          <select value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} className={inputClass}>
+            <option value="">Categoría</option>
+            {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <div className="grid grid-cols-2 gap-2.5">
+            <input type="number" placeholder="Stock actual" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} className={inputClass} />
+            <input type="number" placeholder="Stock mínimo" value={form.stock_minimo} onChange={e => setForm({ ...form, stock_minimo: e.target.value })} className={inputClass} />
+            <input type="number" placeholder="Precio costo" value={form.precio_costo} onChange={e => setForm({ ...form, precio_costo: e.target.value })} className={inputClass} />
+            <input type="number" placeholder="Precio venta" value={form.precio_venta} onChange={e => setForm({ ...form, precio_venta: e.target.value })} className={inputClass} />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleAdd} disabled={saving} className="accent-bg rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-1.5 disabled:opacity-60">
+              {saving ? <Icon.spinner className="w-4 h-4" /> : <Icon.check className="w-4 h-4" />} Guardar
+            </button>
+            <button onClick={() => setShowForm(false)} className="btn-secondary rounded-lg px-4 py-2.5 text-sm">Cancelar</button>
+          </div>
+        </Card>
+      )}
+
+      {filtered.length === 0 ? (
+        <Card className="text-center text-sm text-muted-c py-8">
+          {inventario.length === 0 ? 'No hay repuestos registrados todavía' : 'No se encontraron resultados'}
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(item => {
+            const bajo = item.stock <= item.stock_minimo;
+            return (
+              <Card key={item.id} className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{item.nombre}</p>
+                  <p className="text-xs text-muted-c mt-0.5">{item.categoria} · costo {formatCOP(item.precio_costo)} · venta {formatCOP(item.precio_venta)}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => updateStock(item.id, Math.max(0, item.stock - 1))} className="btn-secondary rounded-lg w-8 h-8 flex items-center justify-center text-base">-</button>
+                  <span className={"min-w-[36px] text-center rounded-lg px-2 py-1.5 text-sm font-semibold " + (bajo ? "danger-bg" : "success-bg")}>{item.stock}</span>
+                  <button onClick={() => updateStock(item.id, item.stock + 1)} className="btn-secondary rounded-lg w-8 h-8 flex items-center justify-center text-base">+</button>
+                </div>
+                <button onClick={() => handleRemove(item.id)} aria-label="Eliminar" className="text-muted-c hover:text-red-500 p-1 shrink-0">
+                  <Icon.trash className="w-4 h-4" />
+                </button>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================
+// TRABAJOS (con historial por fecha)
+// =========================================================
+function TrabajosTab({ trabajos, inventario, addTrabajo, deleteTrabajo }) {
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [filtroFecha, setFiltroFecha] = useState('');
+  const [form, setForm] = useState({ cliente: '', vehiculo: '', descripcion: '', mano_obra: '', responsable: '', fecha: todayStr() });
+  const [repuestosSeleccionados, setRepuestosSeleccionados] = useState([]);
+
+  const inputClass = "input-c rounded-lg px-3 py-2.5 text-sm w-full";
+
+  function addRepuesto() {
+    if (inventario.length === 0) return;
+    setRepuestosSeleccionados([...repuestosSeleccionados, { itemId: inventario[0].id, cantidad: 1 }]);
+  }
+
+  function updateRepuesto(idx, field, value) {
+    const copy = [...repuestosSeleccionados];
+    copy[idx] = { ...copy[idx], [field]: field === 'cantidad' ? Number(value) : value };
+    setRepuestosSeleccionados(copy);
+  }
+
+  function removeRepuesto(idx) {
+    setRepuestosSeleccionados(repuestosSeleccionados.filter((_, i) => i !== idx));
+  }
+
+  async function handleSave() {
+    if (!form.cliente.trim() || saving) return;
+    setSaving(true);
+    const repuestosUsados = repuestosSeleccionados.filter(r => r.cantidad > 0);
+    await addTrabajo({
+      fecha: form.fecha || todayStr(),
+      cliente: form.cliente,
+      vehiculo: form.vehiculo,
+      descripcion: form.descripcion,
+      mano_obra: Number(form.mano_obra) || 0,
+      responsable: form.responsable || 'Sin asignar',
+      repuestos_usados: repuestosUsados
+    }, repuestosUsados);
+    setForm({ cliente: '', vehiculo: '', descripcion: '', mano_obra: '', responsable: '', fecha: todayStr() });
+    setRepuestosSeleccionados([]);
+    setShowForm(false);
+    setSaving(false);
+  }
+
+  function handleRemove(id) {
+    if (!confirm('¿Eliminar este trabajo?')) return;
+    deleteTrabajo(id);
+  }
+
+  // Agrupar por fecha para historial
+  const trabajosFiltrados = filtroFecha ? trabajos.filter(t => t.fecha === filtroFecha) : trabajos;
+  const fechasDisponibles = useMemo(() => {
+    const set = new Set(trabajos.map(t => t.fecha));
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [trabajos]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">Trabajos</h1>
+          <p className="text-sm text-muted-c">{trabajos.length} registrado(s) en total</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="accent-bg rounded-lg px-4 py-2.5 text-sm font-medium whitespace-nowrap flex items-center gap-1.5">
+          <Icon.plus className="w-4 h-4" /> Nuevo
+        </button>
+      </div>
+
+      {showForm && (
+        <Card className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-2.5">
+            <input type="text" placeholder="Cliente" value={form.cliente} onChange={e => setForm({ ...form, cliente: e.target.value })} className={inputClass} />
+            <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
+          </div>
+          <input type="text" placeholder="Vehículo (ej. Pulsar 200)" value={form.vehiculo} onChange={e => setForm({ ...form, vehiculo: e.target.value })} className={inputClass} />
+          <input type="text" placeholder="Responsable (admin/ayudante)" value={form.responsable} onChange={e => setForm({ ...form, responsable: e.target.value })} className={inputClass} />
+          <input type="number" placeholder="Valor mano de obra" value={form.mano_obra} onChange={e => setForm({ ...form, mano_obra: e.target.value })} className={inputClass} />
+          <textarea placeholder="Descripción del trabajo" value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} className={inputClass + " min-h-[60px]"} />
+
+          <p className="text-sm font-medium pt-1">Repuestos usados</p>
+          {repuestosSeleccionados.map((r, idx) => (
+            <div key={idx} className="flex gap-2 items-center">
+              <select value={r.itemId} onChange={e => updateRepuesto(idx, 'itemId', e.target.value)} className={inputClass + " flex-1"}>
+                {inventario.map(item => (
+                  <option key={item.id} value={item.id}>{item.nombre} (stock: {item.stock})</option>
+                ))}
+              </select>
+              <input type="number" min="1" value={r.cantidad} onChange={e => updateRepuesto(idx, 'cantidad', e.target.value)} className={inputClass + " w-20"} />
+              <button onClick={() => removeRepuesto(idx)} className="text-muted-c hover:text-red-500 p-1"><Icon.x className="w-4 h-4" /></button>
+            </div>
+          ))}
+          {inventario.length > 0 ? (
+            <button onClick={addRepuesto} className="accent-text text-sm font-medium flex items-center gap-1">
+              <Icon.plus className="w-4 h-4" /> Agregar repuesto
+            </button>
+          ) : (
+            <p className="text-xs text-muted-c">No hay repuestos en el inventario para asociar</p>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button onClick={handleSave} disabled={saving} className="accent-bg rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-1.5 disabled:opacity-60">
+              {saving ? <Icon.spinner className="w-4 h-4" /> : <Icon.check className="w-4 h-4" />} Guardar trabajo
+            </button>
+            <button onClick={() => { setShowForm(false); setRepuestosSeleccionados([]); }} className="btn-secondary rounded-lg px-4 py-2.5 text-sm">Cancelar</button>
+          </div>
+        </Card>
+      )}
+
+      {fechasDisponibles.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Icon.calendar className="w-4 h-4 text-muted-c shrink-0" />
+          <select value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} className={inputClass + " flex-1"}>
+            <option value="">Todas las fechas</option>
+            {fechasDisponibles.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+      )}
+
+      {trabajosFiltrados.length === 0 ? (
+        <Card className="text-center text-sm text-muted-c py-8">
+          {trabajos.length === 0 ? 'No hay trabajos registrados todavía' : 'No hay trabajos en esta fecha'}
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {trabajosFiltrados.map(t => (
+            <Card key={t.id}>
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{t.cliente} — {t.vehiculo}</p>
+                  {t.descripcion && <p className="text-xs text-muted-c mt-0.5">{t.descripcion}</p>}
+                  <p className="text-xs text-muted-c mt-1">
+                    {t.fecha} · responsable: {t.responsable}
+                    {(t.repuestos_usados || []).length > 0 && (
+                      <> · repuestos: {t.repuestos_usados.map(r => {
+                        const item = inventario.find(i => i.id === r.itemId);
+                        return item ? item.nombre + ' x' + r.cantidad : '';
+                      }).filter(Boolean).join(', ')}</>
+                    )}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-semibold text-sm">{formatCOP(t.mano_obra)}</p>
+                  <button onClick={() => handleRemove(t.id)} className="text-muted-c hover:text-red-500 text-xs mt-1.5 flex items-center gap-1 ml-auto">
+                    <Icon.trash className="w-3.5 h-3.5" /> Eliminar
+                  </button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================
+// REPARTO
+// =========================================================
+function RepartoTab({ config, updateConfig, totalManoObra, totalTaller, totalTrabajadores, repartoPorPersona }) {
+  const pct = config.porcentaje_taller ?? 40;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Reparto</h1>
+        <p className="text-sm text-muted-c">Distribución de la mano de obra (histórico completo)</p>
+      </div>
+
+      <Card>
+        <p className="font-medium mb-3 text-sm">Porcentaje para el taller</p>
+        <div className="flex items-center gap-3">
+          <input type="range" min="0" max="100" step="1" value={pct} onChange={e => updateConfig({ porcentaje_taller: Number(e.target.value) })} className="flex-1" />
+          <span className="font-semibold text-base w-12 text-right">{pct}%</span>
+        </div>
+        <p className="text-xs text-muted-c mt-2">El restante ({100 - pct}%) se reparte entre quienes hicieron el trabajo</p>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-2.5">
+        <MetricCard label="Total mano de obra" value={formatCOP(totalManoObra)} icon={Icon.coins} />
+        <div className="grid grid-cols-2 gap-2.5">
+          <MetricCard label="Para el taller" value={formatCOP(totalTaller)} />
+          <MetricCard label="Para trabajadores" value={formatCOP(totalTrabajadores)} />
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle>Detalle por persona</SectionTitle>
+        {Object.keys(repartoPorPersona).length === 0 ? (
+          <Card className="text-center text-sm text-muted-c py-8">Aún no hay trabajos registrados</Card>
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(repartoPorPersona).map(([persona, datos]) => (
+              <Card key={persona}>
+                <p className="text-sm font-medium mb-2">{persona}</p>
+                <div className="flex justify-between text-xs text-muted-c py-0.5">
+                  <span>Mano de obra generada</span>
+                  <span>{formatCOP(datos.totalManoObra)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-c py-0.5">
+                  <span>Para el taller</span>
+                  <span>{formatCOP(datos.paraTaller)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium pt-1.5 mt-1 border-t border-c">
+                  <span>Le corresponde</span>
+                  <span>{formatCOP(datos.paraPersona)}</span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// CONFIGURACIÓN
+// =========================================================
+function ConfigTab({ config, updateConfig, email, onLogout }) {
+  const inputClass = "input-c rounded-lg px-3 py-2.5 text-sm w-full";
+  const [nombreTaller, setNombreTaller] = useState(config.nombre_taller || '');
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Configuración</h1>
+        <p className="text-sm text-muted-c">Cuenta: {email}</p>
+      </div>
+
+      <div>
+        <SectionTitle>Nombre del taller</SectionTitle>
+        <Card className="flex gap-2">
+          <input type="text" placeholder="Nombre del taller" value={nombreTaller} onChange={e => setNombreTaller(e.target.value)} className={inputClass} />
+          <button onClick={() => updateConfig({ nombre_taller: nombreTaller })} className="accent-bg rounded-lg px-4 py-2.5 text-sm font-medium shrink-0">Guardar</button>
+        </Card>
+      </div>
+
+      <div>
+        <SectionTitle>Tema visual</SectionTitle>
+        <div className="space-y-2">
+          {THEMES.map(theme => {
+            const active = (config.tema || 'claro') === theme.id;
+            return (
+              <button
+                key={theme.id}
+                onClick={() => updateConfig({ tema: theme.id })}
+                className={"w-full surface rounded-xl p-4 flex items-center gap-3 text-left transition-colors " + (active ? "border-2" : "border")}
+                style={{ borderColor: active ? 'var(--accent)' : 'var(--border)' }}
+              >
+                <div className="flex gap-1 shrink-0">
+                  {theme.swatch.map((c, i) => <div key={i} className="w-5 h-5 rounded-full border border-c" style={{ background: c }} />)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm">{theme.label}</p>
+                  <p className="text-xs text-muted-c">{theme.desc}</p>
+                </div>
+                {active && <Icon.check className="w-5 h-5 accent-text shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle>Cuenta</SectionTitle>
+        <Card className="space-y-3">
+          <p className="text-sm text-muted-c">
+            Tus datos están guardados de forma segura en la nube y solo tú puedes acceder a ellos desde cualquier dispositivo iniciando sesión.
+          </p>
+          <button onClick={onLogout} className="btn-secondary rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-1.5">
+            <Icon.logout className="w-4 h-4" /> Cerrar sesión
+          </button>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<Root />);
+</script>
+</body>
+</html>
