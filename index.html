@@ -272,7 +272,17 @@ function AuthScreen() {
         setTimeout(() => { setMode('login'); setPassword(''); }, 1500);
       }
     } catch (err) {
-      setError(err.message || 'Ocurrió un error');
+      let msg = (err && err.message) ? err.message : '';
+      if (!msg || msg === '{}' || msg === '[object Object]') {
+        if (err && err.status) {
+          msg = 'Error del servidor (código ' + err.status + '). Es probable que falle el envío de correo (SMTP). Revisa la configuración en Supabase o los logs en Resend.';
+        } else {
+          msg = 'No se pudo completar la solicitud. Es probable que falle el envío de correo (SMTP). Revisa la configuración en Supabase o los logs en Resend.';
+        }
+      } else if (/error sending|smtp|email/i.test(msg)) {
+        msg = 'No se pudo enviar el correo (' + msg + '). Revisa la configuración SMTP en Supabase y los Logs en Resend.';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
