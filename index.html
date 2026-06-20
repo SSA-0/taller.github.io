@@ -166,8 +166,59 @@ function Root() {
 // =========================================================
 // PANTALLA DE LOGIN / REGISTRO
 // =========================================================
+// ---- Ilustración decorativa del panel lateral ----
+function AuthIllustration() {
+  return (
+    <svg viewBox="0 0 600 600" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <radialGradient id="glow1" cx="30%" cy="20%" r="60%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </radialGradient>
+        <radialGradient id="glow2" cx="80%" cy="80%" r="50%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </radialGradient>
+      </defs>
+      <rect width="600" height="600" fill="url(#glow1)" />
+      <rect width="600" height="600" fill="url(#glow2)" />
+
+      <g transform="translate(300,260)" opacity="0.9">
+        <circle r="90" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="10" />
+        <circle r="34" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="10" />
+        {Array.from({ length: 8 }).map((_, i) => {
+          const angle = (i * 360) / 8;
+          return (
+            <rect key={i} x="-12" y="-108" width="24" height="34" rx="4" fill="rgba(255,255,255,0.55)" transform={`rotate(${angle})`} />
+          );
+        })}
+      </g>
+
+      <g transform="translate(170,400) rotate(-25)" opacity="0.95">
+        <rect x="-12" y="0" width="24" height="140" rx="10" fill="rgba(255,255,255,0.85)" />
+        <circle cx="0" cy="-20" r="38" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="16" />
+      </g>
+
+      <g transform="translate(330,420)" opacity="0.9" stroke="rgba(255,255,255,0.85)" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="-60" cy="40" r="26" />
+        <circle cx="70" cy="40" r="26" />
+        <path d="M-60 40 L-20 0 L40 0 L70 40" />
+        <path d="M-20 0 L0 -35 L30 -35" />
+        <path d="M40 0 L55 -10" />
+      </g>
+
+      <g fill="rgba(255,255,255,0.5)">
+        <circle cx="120" cy="160" r="7" />
+        <circle cx="480" cy="120" r="5" />
+        <circle cx="500" cy="320" r="6" />
+        <circle cx="90" cy="480" r="5" />
+      </g>
+    </svg>
+  );
+}
+
 function AuthScreen() {
-  const [mode, setMode] = useState('login'); // login | signup
+  const [mode, setMode] = useState('login'); // login | signup | forgot | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nombreTaller, setNombreTaller] = useState('');
@@ -175,7 +226,14 @@ function AuthScreen() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
-  const inputClass = "border border-gray-300 rounded-lg px-3 py-2.5 text-sm w-full bg-white";
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      setMode('reset');
+    }
+  }, []);
+
+  const inputClass = "w-full rounded-xl px-4 py-3 text-[15px] bg-white/90 border border-gray-200 placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-shadow";
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -186,10 +244,9 @@ function AuthScreen() {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-      } else {
+      } else if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        // Crear configuración inicial con el nombre del taller
         if (data.user) {
           await supabase.from('configuracion').upsert({
             user_id: data.user.id,
@@ -201,6 +258,18 @@ function AuthScreen() {
         if (!data.session) {
           setInfo('Cuenta creada. Si pide confirmación, revisa tu correo antes de iniciar sesión.');
         }
+      } else if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + window.location.pathname
+        });
+        if (error) throw error;
+        setInfo('Te enviamos un correo con un enlace para restablecer tu contraseña.');
+      } else if (mode === 'reset') {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setInfo('Contraseña actualizada. Ya puedes usarla para iniciar sesión.');
+        window.location.hash = '';
+        setTimeout(() => { setMode('login'); setPassword(''); }, 1500);
       }
     } catch (err) {
       setError(err.message || 'Ocurrió un error');
@@ -209,62 +278,130 @@ function AuthScreen() {
     }
   }
 
+  const titles = {
+    login: { h: 'Bienvenido de nuevo', p: 'Inicia sesión para administrar tu taller' },
+    signup: { h: 'Crea tu taller', p: 'Configura tu cuenta en segundos' },
+    forgot: { h: '¿Olvidaste tu contraseña?', p: 'Te enviaremos un enlace para recuperarla' },
+    reset: { h: 'Nueva contraseña', p: 'Elige una contraseña segura para tu cuenta' }
+  };
+  const t = titles[mode];
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mx-auto mb-3">
-            <Icon.wrench className="w-6 h-6" />
+    <div className="min-h-screen flex bg-gray-50">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #1d4ed8 100%)' }}>
+        <div className="absolute inset-0">
+          <AuthIllustration />
+        </div>
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center border border-white/20">
+              <Icon.wrench className="w-5 h-5" />
+            </div>
+            <span className="font-semibold text-lg tracking-tight">Inventario Taller</span>
           </div>
-          <h1 className="text-xl font-semibold">Inventario Taller</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {mode === 'login' ? 'Inicia sesión en tu taller' : 'Crea la cuenta de tu taller'}
+          <div>
+            <h2 className="text-3xl font-semibold leading-tight mb-3 max-w-md">
+              Controla tu inventario, trabajos y ganancias en un solo lugar
+            </h2>
+            <p className="text-blue-100/90 text-sm max-w-sm">
+              Repuestos, órdenes de trabajo y reparto de mano de obra, sincronizados en la nube para todo tu equipo.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-8 py-10 relative">
+        <div className="w-full max-w-sm relative">
+          <div className="lg:hidden flex items-center gap-2.5 justify-center mb-8">
+            <div className="w-10 h-10 rounded-xl accent-bg flex items-center justify-center">
+              <Icon.wrench className="w-5 h-5" />
+            </div>
+            <span className="font-semibold text-lg text-gray-900">Inventario Taller</span>
+          </div>
+
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-xl shadow-gray-200/60 rounded-2xl p-7 sm:p-8">
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{t.h}</h1>
+              <p className="text-sm text-gray-500 mt-1.5">{t.p}</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {mode === 'signup' && (
+                <input type="text" placeholder="Nombre del taller" value={nombreTaller} onChange={e => setNombreTaller(e.target.value)} className={inputClass} />
+              )}
+
+              {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (
+                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} required className={inputClass} />
+              )}
+
+              {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
+                <input
+                  type="password"
+                  placeholder={mode === 'reset' ? 'Nueva contraseña' : 'Contraseña'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className={inputClass}
+                />
+              )}
+
+              {mode === 'login' && (
+                <div className="text-right -mt-1">
+                  <button type="button" onClick={() => { setMode('forgot'); setError(''); setInfo(''); }} className="text-[13px] font-medium text-blue-600 hover:text-blue-700">
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg danger-bg px-3 py-2.5 text-[13px] flex items-start gap-2">
+                  <Icon.alert className="w-4 h-4 shrink-0 mt-0.5" /> <span>{error}</span>
+                </div>
+              )}
+              {info && (
+                <div className="rounded-lg success-bg px-3 py-2.5 text-[13px] flex items-start gap-2">
+                  <Icon.check className="w-4 h-4 shrink-0 mt-0.5" /> <span>{info}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-xl px-4 py-3 text-[15px] font-medium flex items-center justify-center gap-2 disabled:opacity-60 text-white shadow-lg shadow-blue-600/20 transition-transform active:scale-[0.99]"
+                style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
+              >
+                {loading && <Icon.spinner className="w-4 h-4" />}
+                {mode === 'login' && 'Iniciar sesión'}
+                {mode === 'signup' && 'Crear cuenta'}
+                {mode === 'forgot' && 'Enviar enlace de recuperación'}
+                {mode === 'reset' && 'Guardar nueva contraseña'}
+              </button>
+            </form>
+
+            <div className="mt-5 text-center">
+              {mode === 'login' && (
+                <button onClick={() => { setMode('signup'); setError(''); setInfo(''); }} className="text-sm text-gray-600">
+                  ¿No tienes cuenta? <span className="text-blue-600 font-medium">Crear una</span>
+                </button>
+              )}
+              {mode === 'signup' && (
+                <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="text-sm text-gray-600">
+                  ¿Ya tienes cuenta? <span className="text-blue-600 font-medium">Inicia sesión</span>
+                </button>
+              )}
+              {(mode === 'forgot' || mode === 'reset') && (
+                <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="text-sm text-gray-600">
+                  <span className="text-blue-600 font-medium">Volver a iniciar sesión</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Tus datos se guardan de forma segura y privada en la nube
           </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-          {mode === 'signup' && (
-            <input
-              type="text"
-              placeholder="Nombre del taller"
-              value={nombreTaller}
-              onChange={e => setNombreTaller(e.target.value)}
-              className={inputClass}
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Correo electrónico"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className={inputClass}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={6}
-            className={inputClass}
-          />
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {info && <p className="text-sm text-green-600">{info}</p>}
-
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-60">
-            {loading && <Icon.spinner className="w-4 h-4" />}
-            {mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
-          </button>
-        </form>
-
-        <button
-          onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setInfo(''); }}
-          className="w-full text-center text-sm text-blue-600 mt-4"
-        >
-          {mode === 'login' ? '¿No tienes cuenta? Crear una' : '¿Ya tienes cuenta? Inicia sesión'}
-        </button>
       </div>
     </div>
   );
